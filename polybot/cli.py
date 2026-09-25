@@ -18,7 +18,13 @@ def main() -> None:
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("run", help="Boucle paper trading (aucun ordre réel).")
+    run_cmd = sub.add_parser("run", help="Paper trading sur N fenêtres 5m, puis arrêt à la résolution.")
+    run_cmd.add_argument(
+        "--tours",
+        type=int,
+        default=12,
+        help="Nombre de fenêtres BTC 5m (0 = boucle infinie). Défaut: 12 (~1 h).",
+    )
     once = sub.add_parser("once", help="Un snapshot + une décision, sans boucle.")
     once.add_argument("--trade", action="store_true", help="Enregistre un fill paper si les filtres passent.")
     sub.add_parser("status", help="Affiche le marché BTC 5m courant, sans appeler Jev.")
@@ -29,7 +35,7 @@ def main() -> None:
     settings = load_settings()
 
     if args.cmd == "run":
-        run_loop(settings)
+        run_loop(settings, tours=args.tours)
         return
     if args.cmd == "once":
         run_once(settings, decide=True, trade=args.trade)

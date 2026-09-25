@@ -46,12 +46,7 @@ def settle_due(poly: PolymarketClient, account: PaperAccount) -> None:
             continue
         if now < position.window_end_ts + 2:
             continue
-        outcome = None
-        for _ in range(8):
-            outcome = poly.resolved_outcome(position.slug)
-            if outcome:
-                break
-            time.sleep(2)
+        outcome = poly.resolved_outcome(position.slug)
         if not outcome:
             print(f"  règlement en attente: {position.slug}")
             continue
@@ -61,6 +56,25 @@ def settle_due(poly: PolymarketClient, account: PaperAccount) -> None:
                 f"  SETTLED {settled.slug} côté={settled.side} résultat={outcome} "
                 f"PnL={settled.pnl:+.2f}$"
             )
+
+
+def tours_complete(
+    seen_slugs: list[str],
+    target: int,
+    *,
+    last_outcome: str | None,
+    positions: list[Position],
+) -> bool:
+    """True quand le Nième tour a une résolution Gamma et plus aucune position ouverte sur ces tours."""
+    if target <= 0 or len(seen_slugs) < target:
+        return False
+    planned = seen_slugs[:target]
+    last = planned[-1]
+    last_positions = [pos for pos in positions if pos.slug == last]
+    last_resolved = last_outcome is not None or any(pos.status == "settled" for pos in last_positions)
+    if not last_resolved:
+        return False
+    return not any(pos.status == "open" and pos.slug in planned for pos in positions)
 
 
 def maybe_trade(
@@ -74,6 +88,15 @@ def maybe_trade(
     existing = account.open_on(snapshot.slug)
     if existing:
         print(f"  déjà en position {existing.side.upper()} sur cette fenêtre")
+        return None
+    if snapshot.seconds_left > settings.max_seconds_left:
+        print(
+            f"  en attente des 2 dernières minutes "
+            f"({snapshot.seconds_left:.0f}s restantes, décision à ≤{settings.max_seconds_left}s)"
+        )
+        return None
+    if snapshot.seconds_left < settings.min_seconds_left:
+        print(f"  trop tard ({snapshot.seconds_left:.0f}s restantes), pas de décision")
         return None
     decision = engine.decide(snapshot)
     print(
@@ -135,24 +158,52 @@ def maybe_trade(
     return gate
 
 
-def run_loop(settings: Settings) -> None:
+def run_loop(settings: Settings, tours: int = 12) -> None:
     ledger = PaperLedger(settings.ledger_path)
     account = PaperAccount(settings.paper_cash, settings.state_path, ledger)
     prices = PriceFeed(settings)
     prices.start()
     poly = PolymarketClient(settings)
     engine = DecisionEngine(settings)
+    seen_slugs: list[str] = []
     print("Paper trading BTC Up/Down 5m — aucun ordre réel n'est envoyé.")
+    if tours > 0:
+        print(f"{tours} tours de 5 minutes, arrêt après la résolution du dernier.")
     print(account.summary())
     try:
         while True:
             try:
                 settle_due(poly, account)
                 snapshot = collect_snapshot(poly, prices)
+                if snapshot.slug not in seen_slugs and (tours <= 0 or len(seen_slugs) < tours):
+                    seen_slugs.append(snapshot.slug)
+                    if tours > 0:
+                        print(f"\n--- Tour {len(seen_slugs)}/{tours} ---")
                 print()
                 print(format_snapshot(snapshot))
-                maybe_trade(snapshot, account, engine, settings)
+                planned = snapshot.slug in seen_slugs
+                if planned:
+                    maybe_trade(snapshot, account, engine, settings)
+                elif tours > 0:
+                    print(f"  tours terminés, attente de la résolution du tour {tours} ({seen_slugs[-1]})")
                 print(" ", account.summary())
+                if tours > 0 and seen_slugs:
+                    last_slug = seen_slugs[min(len(seen_slugs), tours) - 1]
+                    last_outcome = poly.resolved_outcome(last_slug) if len(seen_slugs) >= tours else None
+                    if tours_complete(
+                        seen_slugs,
+                        tours,
+                        last_outcome=last_outcome,
+                        positions=account.positions,
+                    ):
+                        print()
+                        print(
+                            f"Fin : le tour {tours} est résolu"
+                            + (f" ({last_outcome})" if last_outcome else "")
+                            + "."
+                        )
+                        print(account.summary())
+                        return
             except PolymarketUnreachable as exc:
                 print(exc)
                 return

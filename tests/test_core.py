@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from polybot.config import Settings
+from polybot.bot import tours_complete
 from polybot.jev import heuristic_decision, parse_jev_response
 from polybot.models import BookLevel, Decision, Fill, MarketSnapshot, OutcomeBook, Position
 from polybot.paper import PaperAccount, PaperLedger
@@ -155,6 +156,27 @@ def test_paper_fill_and_settle(tmp_path: Path) -> None:
     assert settled.pnl is not None
     assert account.wins == 1
     assert abs(account.cash - (100 - fill.cost + fill.shares)) < 1e-9
+
+
+def test_tours_complete_waits_for_third_resolution() -> None:
+    open_third = Position(
+        slug="w3",
+        title="t",
+        side="up",
+        shares=10,
+        avg_price=0.5,
+        fee=0.1,
+        cost=5.1,
+        token_id="tok",
+        window_end_ts=1,
+        opened_at="2026-09-20T00:00:00+00:00",
+        status="open",
+    )
+    seen = ["w1", "w2", "w3"]
+    assert not tours_complete(seen, 3, last_outcome=None, positions=[open_third])
+    settled = Position(**{**open_third.to_dict(), "status": "settled", "resolved_outcome": "down"})
+    assert tours_complete(seen, 3, last_outcome="down", positions=[settled])
+    assert tours_complete(seen, 3, last_outcome="up", positions=[])
 
 
 def test_heuristic_picks_a_side() -> None:

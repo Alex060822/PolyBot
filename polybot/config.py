@@ -95,7 +95,7 @@ def load_settings() -> Settings:
         min_edge=_float("MIN_EDGE", 0.02),
         min_tradeable=_float("MIN_TRADEABLE", 0.0),
         min_seconds_left=_int("MIN_SECONDS_LEFT", 25),
-        max_seconds_left=_int("MAX_SECONDS_LEFT", 298),
+        max_seconds_left=_int("MAX_SECONDS_LEFT", 120),
         max_spread=_float("MAX_SPREAD", 0.08),
         min_ask=_float("MIN_ASK", 0.08),
         max_ask=_float("MAX_ASK", 0.92),

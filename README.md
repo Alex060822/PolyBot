@@ -51,7 +51,8 @@ DECISION_BACKEND=heuristic
 ```powershell
 python -m polybot status     # marché 5m courant, sans Jev
 python -m polybot once --trade
-python -m polybot run        # boucle paper
+python -m polybot run        # 12 fenêtres 5m (~1 h), arrêt après résolution du dernier
+python -m polybot run --tours 0   # boucle infinie
 python -m polybot ledger     # cash, positions, derniers events
 ```
 
@@ -66,6 +67,7 @@ Pour réinitialiser le portefeuille paper : supprime `data/paper_state.json`.
 | `MIN_CONFIDENCE` | Confiance Jev minimale |
 | `MIN_EDGE` | `p_jev - ask - frais` minimum |
 | `MIN_SECONDS_LEFT` | Ne pas entrer trop tard |
+| `MAX_SECONDS_LEFT` | Ne pas entrer trop tôt (120 = seulement les 2 dernières minutes) |
 | `POLYMARKET_SSL_VERIFY` | `false` seulement si un proxy casse les certificats |
 
 ## Réseau (important en France)
